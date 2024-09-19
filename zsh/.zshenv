@@ -1,3 +1,6 @@
 # Environment variables for zsh/cli
-export PATH="${home/}bin:$PATH"
+export PATH="${HOME}/bin:$PATH"
 
+
+# gitlab config
+GITLAB_HOST="gitlab.internal.dtexgov.com"

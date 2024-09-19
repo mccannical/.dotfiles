@@ -1,6 +1,9 @@
 # zsh reload
-alias zshconfig="pycharm ~/.zshrc"
-alias reloadZshConfig="source ~/.zshrc"
+alias zconf="pycharm ~/.zshrc"
+alias rz="exec zsh"
+
+# dotfiles
+alias dotfiles='pycharm ~/.dotfiles'
 
 # Kubernetes
 alias k=kubectl
@@ -23,3 +26,6 @@ alias rm=trash
 alias docker='podman '
 alias build="build --arch=linuxamd64"
 alias run="run --arch=linux/amd64"
+
+# tailscale
+alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
