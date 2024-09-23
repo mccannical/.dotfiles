@@ -19,3 +19,10 @@ function garAuth() {
   gcloud auth print-access-token | podman login -u oauth2accesstoken --password-stdin "${region}"
 }
 
+function gci() {
+  git add .gitlab-ci.yml
+  git commit -m  'testing ci'
+  git push
+  sleep 1
+  glab ci view
+}

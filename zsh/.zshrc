@@ -29,3 +29,4 @@ source ${HOME}/.zplug.zsh
 # autocomplete kubectl & helm
 source <(kubectl completion zsh)
 source <(helm completion zsh)
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh

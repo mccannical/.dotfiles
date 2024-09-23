@@ -3,6 +3,7 @@ alias zconf="pycharm ~/.zshrc"
 alias rz="exec zsh"
 
 # dotfiles
+alias de="pycharm ~/.dotfiles"
 alias dotfiles='pycharm ~/.dotfiles'
 
 # Kubernetes
@@ -29,3 +30,11 @@ alias run="run --arch=linux/amd64"
 
 # tailscale
 alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+
+# git
+alias gc='git commit -m '
+alias gst='git status'
+alias ga='git add'
+alias gco='git checkout'
+# helm
+alias hls='helm list -A'
