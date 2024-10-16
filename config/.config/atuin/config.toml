@@ -1,0 +1,5 @@
+db_path = "~/.history.db"
+enter_accept = false
+inline_height = 40
+
+style = "compact"

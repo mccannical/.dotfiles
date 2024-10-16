@@ -22,4 +22,6 @@
 	allowed = AKIAIOSFODNN7EXAMPLE
 	allowed = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 [core]
-    excludesfile = ${HOME}/.gitignore
+	excludesFile = ~/.gitignore
+[init]
+	defaultBranch = main
