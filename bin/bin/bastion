@@ -1,84 +1,75 @@
 #!/usr/bin/env bash
-
-# prints banner
-function banner() {
-    chatter "================================================================="
-    chatter "💡 To close tunnel: bastion -k"
-    chatter "Tenant[$TENANT_NAME]|Numpy[${numpy_status}]"
+# shellcheck disable=SC2120
+function print_line() {
+  width=80
+  # Create a string of the specified character repeated to fill the width
+  line=$(printf "%${width}s" | tr " " "-")
+  # Print the line
+  chatter "$1 $line"
 }
 # wrapper for echo, prints only if show_output is true
 function chatter() {
   if [ "$show_output" = true ]; then
-    echo " | $*"
+    while IFS= read -r line; do
+      echo "$2 | $line"
+    done <<< "$1"
   fi
-}
-# prints usage
-function usage() {
-  chatter "Usage: bastion [-q] [-k] [-t] [-s] [-d] [-h]"
-  chatter "Options:"
-  chatter "  -a  Authenticate GCP"
-  chatter "  -g  Launch GlobalProtect"
-  chatter "  -q  Quiet mode"
-  chatter "  -k  Close tunnel"
-  chatter "  -t  Tunnel"
-  chatter "  -s  SSH to select node"
-  chatter "  -d  SSH to master0"
-  chatter "  -h  Help"
 }
 
-# check if gcloud is authenticated
-function is_gcp_authed() {
-  chatter "🔎 Checking GCP authentication..."
-  if echo "" | gcloud projects list &> /dev/null; then
-    chatter "✅ GCP authenticated"
-  else
-    auth_gcp
+
+## checks
+# test if flag file is present and less than 1 hours old
+function is_flag_valid() {
+  if ! [ -f "$1" ]; then
+    return 1
   fi
-}
-# check if tunnel is up
-function is_tunnel_up() {
-  for socket in /tmp/bastion-*; do
-     if [ -S "$socket" ]; then
-       chatter "✅ Tunnel is up [$socket]"
-       return 0
-    else
-      chatter "❌ Tunnel is not up"
-      return 1
-    fi
-  done
+  if test "$(find "$1" -mmin +60)"; then
+    rm "$1"
+    is_flag_valid
+  fi
+  return 0
 }
 # check if tenant variable is present, prompt if not
-function has_tenant() {
-   if [ -z "$TENANT_NAME" ]; then
-    chatter "Missing name of the tenant: TENANT_NAME=<example> bastion -t"
+function is_tenant_name_set() {
+  if [ -z "$TENANT_NAME" ]; then
+    chatter "TENANT_NAME not set, choose from menu"
     read -r tenant_id TENANT_NAME tenant_number \
-      < <(gcloud projects list \
-        | grep tenant \
-        | fzf --height=15 \
+      < <(gcloud projects list |
+        grep tenant |
+        fzf --height=15 \
           --border=block \
           --border-label="Tenant Projects" \
           --tac \
           --header="Select Tenant" \
           --preview="echo Project info; gcloud projects describe {1};")
   fi
-
-    read -r tenant_id TENANT_NAME tenant_number \
-    < <(  gcloud projects list | grep "$TENANT_NAME")
-    read -r cluster_name cluster_location cluster_master_version cluster_master_ip cluster_machine_type cluster_node_version cluster_num_nodes cluster_status \
-    < <(  gcloud container clusters list --project="$tenant_id"  2> /dev/null | grep backend)
-    read -r name zone bastion_machine_type bastion_preemptible bastion_internal_ip bastion_external_ip bastion_status \
-    < <(  gcloud compute instances list --project="$tenant_id" | grep -v NAME | grep "bastion")
+  read -r tenant_id TENANT_NAME tenant_number \
+    < <(gcloud projects list | grep "$TENANT_NAME")
+  read -r cluster_name cluster_location cluster_master_version cluster_master_ip cluster_machine_type cluster_node_version cluster_num_nodes cluster_status \
+    < <(gcloud container clusters list --project="$tenant_id" 2> /dev/null | grep backend)
+  read -r name zone bastion_machine_type bastion_preemptible bastion_internal_ip bastion_external_ip bastion_status \
+    < <(gcloud compute instances list --project="$tenant_id" | grep -v NAME | grep "bastion")
+}
+# Globalprotect
+function is_gp_connected() {
+  chatter "  Checking GlobalProtect is connected..."
+  if ! (dig +short regscale.internal.dtexgov.com | grep -q ""); then
+    chatter "Failed to get internal DNS from mgmt plane. VPN must be down. Launching GlobalProtect..."
+    launchctl unload /Library/LaunchAgents/com.paloaltonetworks.gp.pangp*
+    launchctl load /Library/LaunchAgents/com.paloaltonetworks.gp.pangp*
+  else
+    chatter "✅ GlobalProtect connected"
+  fi
 }
 
 # SSH Tunnels
 # create tunnel
 function create_tunnel() {
-  if is_tunnel_up; then
-    chatter "Found existing tunnel. "
-    close_tunnel
-  fi
-    chatter "🚀 Creating tunnel... "
-    gcloud compute ssh "$name" \
+  auth
+  close_tunnel
+  print_line
+  chatter " Creating tunnel... "
+  gcloud compute ssh "$name" \
     --project="$tenant_id" \
     --ssh-flag='-M' \
     --ssh-flag='-D 8080' \
@@ -90,178 +81,134 @@ function close_tunnel() {
   for socket in /tmp/bastion-*; do
     if [ -S "$socket" ]; then
       chatter "Attempting to close tunnel: "
-        ssh -S "$socket" -O exit bastion "${out}"
+      ssh -S "$socket" -O exit bastion "${out}" 2> /dev/null
       chatter " Successfully closed tunnel [$socket]"
     else
       chatter " No tunnel to close."
     fi
   done
 }
+
+## authentication
+function auth() {
+  print_line
+  is_gp_connected
+  if is_flag_valid "$auth_status"; then
+    if ! gcloud projects list &> /dev/null; then
+      auth_gcp
+    fi
+  else
+    auth_gcp
+  fi
+  is_tenant_name_set
+  auth_helm
+  auth_context
+}
 # authenticate GCP
 function auth_gcp() {
-  # GCP
-  chatter "❌ GCP not authenticated. Authentication starting..."
-  gcloud auth login --update-adc
-  gcloud auth print-access-token | helm registry login -u oauth2accesstoken --password-stdin https://us-docker.pkg.dev
+  chatter " ❌ GCP not authenticated. Authentication starting..."
+  chatter "  🔑 Authenticating GCP..."
+  gcloud auth login --update-adc 2> /dev/null
+
+  if [ -f "$auth_status" ]; then
+    rm "$auth_status"
+  fi
+  touch "$auth_status"
+  print_line
+  chatter "✅ GCP authenticated"
+}
+# authenticate Helm
+function auth_helm() {
+  chatter "  🔑 Authenticating Helm..."
+  gcloud auth print-access-token | helm registry login -u oauth2accesstoken --password-stdin https://us-docker.pkg.dev 2> /dev/null
 }
 # get k8s context
-function get_context() {
+function auth_context() {
+  chatter "  🔑 Authenticating k8s context [$cluster_name]..."
   gcloud container clusters get-credentials "$cluster_name" --region="$cluster_location" --project="$tenant_id" 2> /dev/null
 }
 
+## ssh
 # menu to select node
 function select_vm() {
-    has_tenant
-    echo " | Filters[${filters}]"
-    echo " | tenant_id [$tenant_id]"
-    read -r name zone node_machine_type node_internal_ip node_external_ip node_status < <(gcloud compute instances list --project="$tenant_id" \
+    # authenticate to GCP + tenant
+    auth
+    if [ "$hide_gke_vms" = true ]; then
+      filter='-labels:goog-gke-node'
+    else
+      filter=""
+    fi
+    read -r name zone node_machine_type node_internal_ip node_external_ip node_status < <(gcloud compute instances list --filter="$filter" --project="$tenant_id"  \
       | grep -v NAME \
-      | grep "${filters}" \
       | fzf --height=50 \
         --border=block \
         --border-label="Select Node" \
         --tac \
-        --header="Select Node" \
-        --preview="echo Node info; gcloud compute instances describe {1} --zone={2} --project=$tenant_id;")
+        --header="Select Node" )
     ssh_das "$name"
 }
+
 # SSH to the master0 server of a tenant
 # $1: node name
 function ssh_das() {
-  local cmd
-  has_tenant
-  read -r name zone MACHINE_TYPE PREEMPTIBLE INTERNAL_IP EXTERNAL_IP STATUS < <(gcloud compute instances list --project=tenant-heimdall-2969 | grep -v NAME | grep "$1")
-  if [ "$GC" = true ]; then
-    chatter "getting config"
+  # authenticate to GCP + tenant
+  auth
+  read -r name zone MACHINE_TYPE PREEMPTIBLE INTERNAL_IP EXTERNAL_IP STATUS < <(gcloud compute instances list --project="$tenant_id" | grep -v NAME | grep "$1")
+  if [ "$interactive_shell" = false ]; then
+    chatter " Connecting to master0 and downloading effective config..."
     cmd=$(printf "gcloud compute ssh --zone='%s' '%s' --tunnel-through-iap --project='%s' -- sudo dt fetch-effective-config -s deep self > %s.yaml" "$zone" "$name" "$tenant_id" "$tenant_id")
   else
     cmd=$(printf "gcloud compute ssh --zone='%s' '%s' --tunnel-through-iap --project='%s' %s" "$zone" "$name" "$tenant_id" "$output")
   fi
-
   chatter "=========== SSH Session to $name ================================"
   chatter "ℹ️  SSH to [$TENANT_NAME] $cmd"
   eval "$cmd"
 }
-# steps to create tunnel
-function tunnel() {
-  is_gp_connected
-  is_gcp_authed
-  has_tenant
-  get_context
-  create_tunnel
-  banner
 
-  chatter "================================================================="
-  chatter "🚀 Ready to go! [${TENANT_NAME}] | [${cluster_name}] | [$HTTPS_PROXY]"
-  chatter "================================================================="
-  is_k8s_in_sight
+# prints usage
+function usage() {
+  chatter "Usage: bastion [options]"
+  chatter "Options:"
+  chatter "Run without flags to refresh GCP authentication"
+  chatter "   -v Verbose mode (set -x)"
+  chatter "   -q Silent mode"
+  chatter "   -g used to show GKE VMs with -w"
+  chatter "   -k closes all tunnels"
+  chatter "   -t creates a tunnel to a tenant, specified with env: TENANT_NAME"
+  chatter "   -w Wizard mode. Select a VM to SSH to from a list"
+  chatter "   -s SSH to master0 of a tenant, specified with env: TENANT_NAME"
+  chatter "   -c downloads effective config from master0, specified with env: TENANT_NAME"
+  chatter "   -h help"
 }
 
-# Globalprotect
-function is_gp_connected() {
-    if ! (dig +short regscale.internal.dtexgov.com | grep -q ""); then
-      chatter "Failed to get internal DNS from mgmt plane. VPN must be down. Launching GlobalProtect..."
-      launchctl unload /Library/LaunchAgents/com.paloaltonetworks.gp.pangp*
-      launchctl load /Library/LaunchAgents/com.paloaltonetworks.gp.pangp*
-  else
-    chatter "✅ GlobalProtect connected"
-  fi
-}
-# checks if numpy is installed, installs if missing
-function is_numpy_installed() {
-  local package_name=numpy
-  if $(gcloud info --format="value(basic.python_location)") -m pip list --format json \
-    | jq -r '.[].name' \
-    | grep -q "$package_name"; then
-    numpy_status="✅"
-  else
-    numpy_status="❌"
-  fi
-
-}
-function set_proxy() {
-  echo "Setting up proxy env variable by running: "
-  echo '  export HTTPS_PROXY="socks5://localhost:8080'
-
-}
-
-# determine if k8s is in line of sight
-function is_k8s_in_sight() {
-  if kubectl get nodes --request-timeout 1 &> /dev/null; then
-    chatter "✅ K8s in sight"
-    return 0
-  else
-    chatter "❌ K8s not in sight"
-    set_proxy
-    return 1
-  fi
-}
-# updates bastion scripts
-function update() {
-  echo "Updating bastion scripts"
-  branches=("main" "beta")
-  local b
-
-  for b in "${branches[@]}"; do
-    echo "Updating bastion script for branch: $b"
-    bastion_path=${HOME}/.dotfiles/bin/bin/bastion
-    # Update bastion script
-    echo "  [+] Updating bastion script"
-    glab api '/projects/38/repository/files/bastions%2Fbastion?ref='"$b" | jq -r .content | base64 -d -i - > ${bastion_path}
-    # Update bastion-beta script
-    echo "  [+] Updating bastion-beta script"
-    glab api '/projects/38/repository/files/bastions%2Fbastion?ref='"$b" | jq -r .content | base64 -d -i - > ${bastion_path}-beta
-    chmod +x ${bastion_path}
-    chmod +x ${bastion_path}-beta
-  done
-}
 
 # main function
 function main() {
-  set -em
-  echo "Version v0.1.1"
+  auth_status="${HOME}/bastion-authed"
+  is_flag_valid "$auth_status"
   # Variables
   export CLOUDSDK_PYTHON_SITEPACKAGES=1
   unset HTTPS_PROXY
 
-  # check if tailscale is present
-  if [ -d /Applications/Tailscale.app ]; then
-    set +e
-    chatter " Tailscale installed"
-    # turn down tailscale if on
-    if "/Applications/Tailscale.app/Contents/MacOS/Tailscale" status != "Tailscale is stopped." 2> /dev/null; then
-      chatter " Turning down tailscale"
-      "/Applications/Tailscale.app/Contents/MacOS/Tailscale" down
-    fi
-    set -e
-  fi
-
   ## ---- Defaults ---- ##
   show_output=true
-  filters=""
-  if [ "$show_output" = false ]; then
-    output=--no-user-output-enabled
-    out=-q
-  fi
+  hide_gke_vms=true
+  interactive_shell=true
 
-  #  is_numpy_installed
-
-  while getopts nqvagsdtkuh flag; do
+  while getopts vqgktwsch flag; do
     case "$flag" in
-        n) filters="-v node" ;;
-        q) show_output=false ;;
-        v) set -emx ;;
-        a) is_gcp_authed ;;
-        g) is_gp_connected ;;
-        s) select_vm ;;
-        d) ssh_das master0 ;;
-        t) tunnel ;;
-        k) close_tunnel ;;
-        u) update ;;
-        h | *) usage ;;
+    v) set -ex ;;
+    q) show_output=false ;;
+    g) hide_gke_vms=false ;;
+    c) interactive_shell=false ; ssh_das ; exit ;;
+    k) close_tunnel ; exit ;;
+    t) create_tunnel ; exit ;;
+    w) select_vm ; exit ;;
+    s) ssh_das ; exit ;;
+    h | *) usage ; exit ;;
     esac
   done
-  banner
+  auth_gcp
+  chatter "🚀 Tenant [$TENANT_NAME] Tenant Project [${tenant_id}] | Cluster [${cluster_name}]"
 }
-
 main "$@"

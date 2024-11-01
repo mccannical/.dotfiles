@@ -43,3 +43,18 @@ alias hls='helm list -A'
 
 # zoxide
 alias cd="z"
+
+# tofu
+alias tsl="tofu state list "
+alias ts="tofu state show "
+alias tv="tofu validate "
+alias tf="tofu fmt "
+alias to="tofu output "
+
+# glab
+alias gsl="glab stacks list "
+alias gsh="glab stacks show "
+alias gls="glab stacks sync "
+alias gsc="glab stacks create "
+alias save="glab stacks save "
+

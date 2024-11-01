@@ -3,3 +3,4 @@ export PATH="${HOME}/bin:$PATH"
 
 # gitlab config
 GITLAB_HOST="gitlab.internal.dtexgov.com"
+. "$HOME/.cargo/env"

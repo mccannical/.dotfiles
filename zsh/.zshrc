@@ -14,9 +14,6 @@ source $(brew --prefix)/opt/antidote/share/antidote/antidote.zsh
 # initialize plugins statically with ${ZDOTDIR:-~}/.zsh_plugins.txt
 antidote load
 
-#${ZDOTDIR:-~}/.zshrc
-autoload -Uz compinit
-compinit
 # Set the root name of the plugins files (.txt and .zsh) antidote will use.
 zsh_plugins=${ZDOTDIR:-~}/.zsh_plugins
 
@@ -44,19 +41,13 @@ source <(kubectl completion zsh)
 source <(helm completion zsh)
 [ -f ${HOME}/.fzf.zsh ] && source ${HOME}/.fzf.zsh
 
-#zoxide
+# zoxide
 eval "$(zoxide init zsh)"
 
 # starship
 eval "$(starship completions zsh)"
 eval "$(starship init zsh)"
 
-# goenv
-export GOENV_ROOT="$HOME/.goenv"
-export PATH="$GOENV_ROOT/bin:$PATH"
-eval "$(goenv init -)"
-export PATH="$GOROOT/bin:$PATH"
-export PATH="$PATH:$GOPATH/bin"
 autoload -U +X bashcompinit && bashcompinit
 complete -o nospace -C /opt/homebrew/bin/tofu tofu
 
@@ -68,3 +59,34 @@ eval "$(atuin init zsh --disable-up-arrow)"
 
 # Bind up-arrow but not ctrl-r
 eval "$(atuin init zsh --disable-ctrl-r)"
+
+# goenv
+export GOENV_ROOT="$HOME/.goenv"
+export PATH="$GOENV_ROOT/bin:$PATH"
+eval "$(goenv init -)"
+export PATH="$GOROOT/bin:$PATH"
+export PATH="$PATH:$GOPATH/bin"
+
+# iterm2_shell_integration
+test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell_integration.zsh"
+bindkey -e
+bindkey '\e\e[C' forward-word
+bindkey '\e\e[D' backward-word
+
+# pyenv
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+export PIPENV_PYTHON="$PYENV_ROOT/shims/python"
+
+plugin=(
+  pyenv
+)
+
+eval "$(pyenv init -)"
+eval "$(pyenv virtualenv-init -)"
+
+# last autoload
+autoload -U compinit; compinit
+
+# mise
+eval "$(~/.local/bin/mise activate zsh)"
