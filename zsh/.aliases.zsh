@@ -52,9 +52,10 @@ alias tf="tofu fmt "
 alias to="tofu output "
 
 # glab
-alias gsl="glab stacks list "
-alias gsh="glab stacks show "
-alias gls="glab stacks sync "
-alias gsc="glab stacks create "
-alias save="glab stacks save "
+alias gl="glab stacks list "
+alias glnew="glab stacks create "
+alias glsave="glab stacks save "
+alias glsync="glab stacks sync "
 
+# anisble
+alias av="ansible-vault view "
