@@ -75,3 +75,9 @@ function proxy() {
 function tunl() {
   tofu force-unlock -force $1
 }
+
+# handy
+function stamp() {
+  printf "\e]1337;SetBadgeFormat=%s\a" \
+  $(echo -n "TENANT_NAME [$TENANT_NAME]" | base64)
+}

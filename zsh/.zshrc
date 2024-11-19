@@ -23,12 +23,10 @@ source ${HOME}/.functions.zsh
 autoload -U compinit; compinit
 
 source $(brew --prefix)/opt/antidote/share/antidote/antidote.zsh ; antidote load
-eval "$(~/.local/bin/mise activate zsh)"
+# eval "$(~/.local/bin/mise activate zsh)"
 eval "$(mise activate zsh --shims)"
 eval "$(zoxide init zsh)"
 eval "$(starship init zsh)"
 eval "$(starship completions zsh)"
 eval "$(atuin init zsh)"; . "$HOME/.atuin/bin/env" ; eval "$(atuin init zsh --disable-up-arrow)" ; eval "$(atuin init zsh --disable-ctrl-r)"
 
-# Add Homebrew to PATH
-eval "$(/opt/homebrew/bin/brew shellenv)"

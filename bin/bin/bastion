@@ -16,7 +16,6 @@ function chatter() {
   fi
 }
 
-
 ## checks
 # test if flag file is present and less than 1 hours old
 function is_flag_valid() {
@@ -29,6 +28,7 @@ function is_flag_valid() {
   fi
   return 0
 }
+
 # check if tenant variable is present, prompt if not
 function is_tenant_name_set() {
   if [ -z "$TENANT_NAME" ]; then
@@ -52,14 +52,12 @@ function is_tenant_name_set() {
 }
 # Globalprotect
 function is_gp_connected() {
-  chatter "  Checking GlobalProtect is connected..."
   if ! (dig +short regscale.internal.dtexgov.com | grep -q ""); then
-    chatter "Failed to get internal DNS from mgmt plane. VPN must be down. Launching GlobalProtect..."
+    chatter "🔴 Failed to get internal DNS from mgmt plane. VPN must be down. Launching GlobalProtect..."
     launchctl unload /Library/LaunchAgents/com.paloaltonetworks.gp.pangp*
     launchctl load /Library/LaunchAgents/com.paloaltonetworks.gp.pangp*
-  else
-    chatter "✅ GlobalProtect connected"
   fi
+  chatter "✅ GlobalProtect connected"
 }
 
 # SSH Tunnels
@@ -89,10 +87,13 @@ function close_tunnel() {
   done
 }
 
+
 ## authentication
 function auth() {
   print_line
   is_gp_connected
+  print_line
+  chatter "GCP Authentication..."
   if is_flag_valid "$auth_status"; then
     if ! gcloud projects list &> /dev/null; then
       auth_gcp
@@ -114,7 +115,6 @@ function auth_gcp() {
     rm "$auth_status"
   fi
   touch "$auth_status"
-  print_line
   chatter "✅ GCP authenticated"
 }
 # authenticate Helm
@@ -151,6 +151,7 @@ function select_vm() {
 # SSH to the master0 server of a tenant
 # $1: node name
 function ssh_das() {
+  cmd=""
   # authenticate to GCP + tenant
   auth
   read -r name zone MACHINE_TYPE PREEMPTIBLE INTERNAL_IP EXTERNAL_IP STATUS < <(gcloud compute instances list --project="$tenant_id" | grep -v NAME | grep "$1")
@@ -158,7 +159,12 @@ function ssh_das() {
     chatter " Connecting to master0 and downloading effective config..."
     cmd=$(printf "gcloud compute ssh --zone='%s' '%s' --tunnel-through-iap --project='%s' -- sudo dt fetch-effective-config -s deep self > %s.yaml" "$zone" "$name" "$tenant_id" "$tenant_id")
   else
-    cmd=$(printf "gcloud compute ssh --zone='%s' '%s' --tunnel-through-iap --project='%s' %s" "$zone" "$name" "$tenant_id" "$output")
+    echo "ℹ️  SSH to [$TENANT_NAME] $cmd"
+    echo "Zone: $zone"
+    echo "Name: $name"
+    echo "Tenant ID: $tenant_id"
+    echo "Output: $output"
+    cmd=$(printf "gcloud compute ssh  %s --tunnel-through-iap --zone='%s' --project='%s'" "$name" "$zone" "$tenant_id")
   fi
   chatter "=========== SSH Session to $name ================================"
   chatter "ℹ️  SSH to [$TENANT_NAME] $cmd"
@@ -181,6 +187,16 @@ function usage() {
   chatter "   -h help"
 }
 
+# handy
+function stamp() {
+  if [ -z "$TENANT_NAME" ]; then
+    TENANT_NAME="⁉️not set ⁉️"
+  fi
+  if [[ -d /Applications/iTerm.app ]]; then
+    printf "\e]1337;SetBadgeFormat=%s\a" \
+  $(echo -n "TENANT_NAME [$TENANT_NAME]" | base64)  # proceed with installing iTerm
+  fi
+}
 
 # main function
 function main() {
@@ -195,7 +211,7 @@ function main() {
   hide_gke_vms=true
   interactive_shell=true
 
-  while getopts vqgktwsch flag; do
+  while getopts vqgktwscbh flag; do
     case "$flag" in
     v) set -ex ;;
     q) show_output=false ;;
@@ -204,11 +220,13 @@ function main() {
     k) close_tunnel ; exit ;;
     t) create_tunnel ; exit ;;
     w) select_vm ; exit ;;
-    s) ssh_das ; exit ;;
+    s) ssh_das master0 ; exit ;;
+    b) stamp ; exit ;;
     h | *) usage ; exit ;;
     esac
   done
-  auth_gcp
+  auth
   chatter "🚀 Tenant [$TENANT_NAME] Tenant Project [${tenant_id}] | Cluster [${cluster_name}]"
 }
+stamp
 main "$@"

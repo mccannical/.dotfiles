@@ -54,7 +54,8 @@ go.work
 .LSOverride
 
 # Icon must end with two \r
-Icon
+Icon
+
 
 # Thumbnails
 ._*
@@ -292,3 +293,6 @@ generated/
 .monokle
 .monokle/*
 
+# annoying
+Pipfile
+Pipfile.lock
